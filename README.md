@@ -16,3 +16,7 @@ $ gcc -lws2_32 -lpthread -I../mbedtls/include main.c -o main.exe && main.exe
 
 ## 第三方类库
 
+- https://github.com/sqlite/sqlite
+- https://github.com/ARMmbed/mbedtls
+- https://github.com/DaveGamble/cJSON
+
