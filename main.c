@@ -9,6 +9,9 @@
 #include "http2.h"
 #include "lite-list.h"
 
+#define DEFAULT_HOST "openapi.youdao.com"
+#define DEFAULT_PORT "403"
+
 #ifndef container_of
 #    define container_of(ptr, type, member) \
         ((type*)((char*)(ptr)-offsetof(type, member)))
@@ -87,6 +90,37 @@ list_head_t* collect()
 }
 int main()
 {
+#if defined(_WIN32)
+    WSADATA d;
+    if (WSAStartup(MAKEWORD(2, 2), &d))
+    {
+        printf("Failed to initialize.\n");
+        return EXIT_FAILURE;
+    }
+#endif
+    const char* host = DEFAULT_HOST;
+    const char* port = DEFAULT_PORT;
+
+    struct addrinfo hints;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_socktype = SOCK_STREAM;
+    struct addrinfo* peer_address;
+    if (getaddrinfo(host, port, &hints, &peer_address))
+    {
+        printf("getaddrinfo() failed. (%d)\n", GETSOCKETERRNO());
+        return EXIT_FAILURE;
+    }
+
+    char address_buf[128];
+    char service_buf[128];
+
+    getnameinfo(peer_address->ai_addr, peer_address->ai_addrlen,
+        address_buf, sizeof(address_buf),
+        service_buf, sizeof(service_buf),
+        NI_NUMERICHOST);
+
+    printf("%s %s\n", address_buf, service_buf);
+
     //collect();
 
     // word_t *pos, *tmp;
@@ -98,5 +132,8 @@ int main()
     //     free(pos);
     // }
 
-    return 0;
+#if defined(_WIN32)
+    WSACleanup();
+#endif
+    return EXIT_SUCCESS;
 }
