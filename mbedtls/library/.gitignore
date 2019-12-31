@@ -1,0 +1,6 @@
+*.o
+libmbed*
+*.sln
+*.vcxproj
+*.a
+*.dll
