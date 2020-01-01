@@ -18,7 +18,7 @@ $ gcc -lws2_32 -lpthread -I../mbedtls/include main.c -o main.exe && main.exe
 
 ## 词典
 
-[youdao.db](https://github.com/grandiloquent/youdao-dictionary/blob/master/youdao.db)
+下载 [youdao.db](https://github.com/grandiloquent/youdao-dictionary/blob/master/youdao.db)
 
 包含 `29769` 个单词
 
