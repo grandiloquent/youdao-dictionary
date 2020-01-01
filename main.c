@@ -21,8 +21,8 @@
 #    include <conio.h>
 #endif
 
-#define API_KEY "1f5687b5a6b94361"
-#define API_SECRET "2433z6GPFslGhUuQltdWP7CPlbk8NZC0"
+#define API_KEY "6543644a29c7b7d3"
+#define API_SECRET "fv5H0x6bcz2AeJ5CCebHytQEr1TEOWLt"
 
 #define ERR_TCP_WRITE_TIMEOUT 11;
 #define ERR_TCP_WRITE_FAIL 12
@@ -702,6 +702,10 @@ int query(const char* word)
 
     if (strlen(buf_body) > 0)
         insert_sql(db, word, buf_body, s_insert);
+    else
+    {
+        printf("[ERROR]: %s %s\n", word,rs_data(&s));
+    }
 
 error:
     cJSON_Delete(json);
