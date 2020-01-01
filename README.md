@@ -16,6 +16,12 @@
 $ gcc -lws2_32 -lpthread -I../mbedtls/include main.c -o main.exe && main.exe
 ```
 
+## 词典
+
+[youdao.db](https://github.com/grandiloquent/youdao-dictionary/blob/master/youdao.db)
+
+包含 `29769` 个单词
+
 ## 第三方类库
 
 - https://github.com/sqlite/sqlite
