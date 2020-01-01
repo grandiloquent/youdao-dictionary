@@ -2,6 +2,8 @@
 
 使用 C 语言通过有道词典查询整本书的单词，格式化查询结果后，写入 SQLite 数据库。
 
+可导出数据 制作 Kindle 电纸书字典
+
 ## 编译 mbedtls
 
 1. `C:\msys64\msys2_shell.cmd -mingw64`

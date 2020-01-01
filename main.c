@@ -14,15 +14,18 @@
 #include "cJSON/cJSON.h"
 #include "http2.h"
 #include "lite-list.h"
-
 #include "rapidstring.h"
+#include "shared.h"
 
 #if defined(_WIN32)
 #    include <conio.h>
 #endif
 
-#define API_KEY "6543644a29c7b7d3"
-#define API_SECRET "fv5H0x6bcz2AeJ5CCebHytQEr1TEOWLt"
+#define API_KEY "073f32ad99bedab0"
+
+//"4da34b556074bc9f"
+#define API_SECRET "uwYJib5sSgrZR8ztZUEICIohwW7mHu4i"
+// "Wt5i6HHltTGFAQgSUgofeWdFZyDxKwOy"
 
 #define ERR_TCP_WRITE_TIMEOUT 11;
 #define ERR_TCP_WRITE_FAIL 12
@@ -62,32 +65,7 @@ typedef struct word
 } word_t;
 static const char HEX_ARRAY[] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
     'A', 'B', 'C', 'D', 'E', 'F' };
-static inline int indexof(const char* s1, const char* s2)
-{
-    if (s1 == NULL || s2 == NULL || *s1 == 0 || *s2 == 0)
-    {
-        return -1;
-    }
-    const char* p1 = s1;
 
-    size_t len = strlen(p1);
-
-    for (size_t i = 0; i < len; i++)
-    {
-        if (p1[i] == *s2)
-        {
-            const char* p2 = s2;
-            while (*p2 && *p2 == p1[i])
-            {
-                i++;
-                p2++;
-            }
-            if (*p2 == 0)
-                return i;
-        }
-    }
-    return -1;
-}
 int contains(list_head_t* list, const char* s)
 {
     word_t* pos;
@@ -98,37 +76,6 @@ int contains(list_head_t* list, const char* s)
     }
     return 0;
 }
-static uint64_t _linux_get_time_ms(void)
-{
-#if defined(_WIN32)
-    return GetTickCount64();
-#else
-    struct timeval tv = { 0 };
-    uint64_t time_ms;
-
-    gettimeofday(&tv, NULL);
-
-    time_ms = tv.tv_sec * 1000 + tv.tv_usec / 1000;
-
-    return time_ms;
-#endif
-}
-
-static uint64_t _linux_time_left(uint64_t t_end, uint64_t t_now)
-{
-    uint64_t t_left;
-
-    if (t_end > t_now)
-    {
-        t_left = t_end - t_now;
-    }
-    else
-    {
-        t_left = 0;
-    }
-
-    return t_left;
-}
 
 list_head_t* collect()
 {
@@ -138,7 +85,7 @@ list_head_t* collect()
     INIT_LIST_HEAD(&word_list);
 
     // 加载文本文件
-    FILE* txt = fopen("words.txt", "r");
+    FILE* txt = fopen("./words/10.txt", "r");
     if (!txt)
     {
         return 0;
@@ -160,10 +107,16 @@ list_head_t* collect()
             // 写入相应的内存块
             buf[i++] = isupper(c) ? tolower(c) : c;
         }
-        else if (buf[0] == 0 || strlen(buf) == 1)
+        else if (buf[0] == 0)
         {
             // 如果单词为空或长度小于2
             // 继续下一个循环
+            continue;
+        }
+        else if (strlen(buf) == 1)
+        {
+            i = 0;
+            buf[0] = 0;
             continue;
         }
         else
@@ -241,7 +194,7 @@ char* url(const char* word, char* buf_path, size_t buf_path_len)
     md5_buf[32] = 0;
     memset(buf_path, 0, buf_path_len);
     snprintf(buf_path, buf_path_len, "/api?q=%s&salt=%d&sign=%s&from=%s&appKey=%s&to=%s",
-        word, salt, md5_buf, from, "1f5687b5a6b94361", to);
+        word, salt, md5_buf, from, API_KEY, to);
     return buf_path;
 }
 rapidstring* header(rapidstring* s, const char* word)
@@ -701,10 +654,15 @@ int query(const char* word)
     }
 
     if (strlen(buf_body) > 0)
+    {
         insert_sql(db, word, buf_body, s_insert);
+    }
     else
     {
-        printf("[ERROR]: %s %s\n", word,rs_data(&s));
+
+        // printf("[ERROR]: %s %s\n", word,rs_data(&s));
+
+        log_err("[ERROR]: %s\n", "Result is empty.");
     }
 
 error:
