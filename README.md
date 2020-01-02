@@ -26,7 +26,7 @@ $ select key,count(key),max(length(key)) from dic order by length(key) desc
 $ select key,length(key),count(key) from dic GROUP by length(key) ORDER by count(key) desc
 ```
 
-包含 `39381` 个单词
+包含 `48254` 个单词
 
 ## 第三方类库
 
