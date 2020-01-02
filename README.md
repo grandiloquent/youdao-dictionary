@@ -20,7 +20,13 @@ $ gcc -lws2_32 -lpthread -I../mbedtls/include main.c -o main.exe && main.exe
 
 下载 [youdao.db](https://github.com/grandiloquent/youdao-dictionary/blob/master/youdao.db)
 
-包含 `29769` 个单词
+```sql
+$ select count(*) from dic
+$ select key,count(key),max(length(key)) from dic order by length(key) desc
+$ select key,length(key),count(key) from dic GROUP by length(key) ORDER by count(key) desc
+```
+
+包含 `39381` 个单词
 
 ## 第三方类库
 
