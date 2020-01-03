@@ -1,4 +1,4 @@
-// -lws2_32 -lpthread -I../sqlite -L../sqlite -lsqlite3 tmd5/tmd5.c cJSON/cJSON.c
+// -lws2_32 -lpthread -I../sqlite -L../sqlite -lsqlite3 tmd5/tmd5.c cJSON/cJSON.c threadpool.c
 // -I../mbedtls/include
 
 #include <stdio.h>
@@ -16,6 +16,8 @@
 #include "lite-list.h"
 #include "rapidstring.h"
 #include "shared.h"
+#include "threadpool.h"
+#include "helper.h"
 
 #if defined(_WIN32)
 #    include <conio.h>
@@ -51,10 +53,14 @@
 #    define container_of(ptr, type, member) \
         ((type*)((char*)(ptr)-offsetof(type, member)))
 #endif
-
+#define THREAD 2
+#define QUEUE  32
 static sqlite3_stmt* s_insert;
 static sqlite3_stmt* s_query;
 static sqlite3* db;
+static int thread_count;
+
+pthread_mutex_t mutex;
 
 typedef struct word {
 	char* buf;
@@ -80,7 +86,7 @@ list_head_t* collect() {
 	INIT_LIST_HEAD(&word_list);
 
 	// 加载文本文件
-	FILE* txt = fopen("./words/23.txt", "r");
+	FILE* txt = fopen("./words/30.txt", "r");
 	if (!txt) {
 		return 0;
 	}
@@ -405,9 +411,9 @@ int read_fully(uintptr_t fd, rapidstring* s, uint32_t timeout_ms) {
 					continue;
 				}
 				err_code = ERR_TCP_READ_FAIL;
-				printf("ERR_TCP_READ_FAIL \n");
+				printf("[E]: ERR_TCP_READ_FAIL %d\n",err_code);
 
-				break;
+				return err_code;
 			}
 		} else if (0 == ret) {
 			err_code = ERR_TCP_READ_TIMEOUT;
@@ -416,66 +422,50 @@ int read_fully(uintptr_t fd, rapidstring* s, uint32_t timeout_ms) {
 			break;
 		} else {
 			err_code = ERR_TCP_READ_FAIL;
-			printf("ERR_TCP_READ_FAIL \n");
-
-			break;
+			return err_code;
 		}
 	} while (1);
 
-	if (err_code == ERR_TCP_READ_TIMEOUT && len_recv == 0)
-		err_code = ERR_TCP_NOTHING_TO_READ;
+	//if (err_code == ERR_TCP_READ_TIMEOUT && len_recv == 0)
+	//err_code = ERR_TCP_NOTHING_TO_READ;
 
 	return err_code;
 }
 
 int query_sql(sqlite3* db, const char* key, sqlite3_stmt* s) {
+
 	//sqlite3_clear_bindings(s);
 	int rc = sqlite3_bind_text(s, 1, key, strlen(key), NULL);
 	if (rc) {
 		fprintf(stderr, "error: Bind %s to %d failed, %s\n", key, rc, sqlite3_errmsg(db));
+
 		return rc;
 	}
 	rc = sqlite3_step(s);
 	if (rc != SQLITE_DONE && rc != SQLITE_ROW) {
 
 		fprintf(stderr, "insert statement didn't return DONE (%i): %s\n", rc, sqlite3_errmsg(db));
+
 		return rc;
 	}
 	const char* r = sqlite3_column_text(s, 0);
 	rc = r != NULL;
 	//sqlite3_finalize(
 	sqlite3_reset(s);
-	return rc;
-}
-int insert_sql(sqlite3* db, const char* key, const char* word, sqlite3_stmt* s) {
-	sqlite3_clear_bindings(s);
-
-	int rc = sqlite3_bind_text(s, 1, key, strlen(key), NULL);
-	if (rc) {
-		fprintf(stderr, "error: Bind %s to %d failed, %s\n", key, rc, sqlite3_errmsg(db));
-		return rc;
-	}
-	rc = sqlite3_bind_text(s, 2, word, strlen(word), NULL);
-	if (rc) {
-		fprintf(stderr, "error: Bind %s to %d failed, %s\n", key, rc, sqlite3_errmsg(db));
-		return rc;
-	}
-	rc = sqlite3_step(s);
-	if (SQLITE_DONE != rc) {
-		fprintf(stderr, "insert statement didn't return DONE (%i): %s\n", rc, sqlite3_errmsg(db));
-		return rc;
-	}
-	sqlite3_reset(s);
 
 	return rc;
 }
-int query(const char* word) {
+
+void query(void* arg) {
+	char * word=( char *)arg;
+	printf("[D]: %s\n",word);
+
 
 	uintptr_t fd = connect_socket(DEFAULT_HOST, DEFAULT_PORT);
 
 	if (fd == 0) {
-		printf("connect_socket() \n");
-		return 0;
+		printf("[E]: connect_socket() \n");
+		return ;
 	}
 
 	rapidstring s;
@@ -487,22 +477,30 @@ int query(const char* word) {
 	int rc = write(fd, rs_data(&s), rs_len(&s), 10000, &written_len);
 
 	if (rc != RET_SUCCESS) {
-		CLOSESOCKET(fd);
-		return 0;
-	}
-
-	size_t read_len = 0;
-
-	rs_clear(&s);
-	rc = read_fully(fd, &s, 10000);
-
-	if (rc != RET_SUCCESS) {
 		rs_free(&s);
 		CLOSESOCKET(fd);
-		return 0;
+		return;
+	}
+
+	rs_clear(&s);
+	size_t read_len = 0;
+	pthread_mutex_lock(&mutex);
+	rc = read_fully(fd, &s, 10000);
+	pthread_mutex_unlock(&mutex);
+	if (rc != RET_SUCCESS) {
+
+		printf("[E]: read_fully(). %d\n",rc);
+		rs_free(&s);
+		CLOSESOCKET(fd);
+		return;
 	}
 
 	char* buf = rs_data(&s);
+
+	if (buf==NULL) {
+		printf("[E]: buf is null.\n");
+		return;
+	}
 
 	buf = strstr(buf, "\r\n\r\n");
 	if (buf != NULL || strlen(buf) < 4) {
@@ -511,64 +509,23 @@ int query(const char* word) {
 	} else {
 		rs_free(&s);
 		CLOSESOCKET(fd);
-		return 0;
+		return ;
 	}
 	if (buf != NULL || strlen(buf) < 2) {
 		buf = buf + 2;
 	} else {
 		rs_free(&s);
 		CLOSESOCKET(fd);
-		return 0;
+		return ;
 	}
 	size_t buf_body_len = 1024 << 2, buf_body_read_len = 0;
 	char buf_body[buf_body_len];
 	memset(buf_body, 0, buf_body_len);
 
-	//printf("%s\n", buf);
 
-	cJSON* json = cJSON_Parse(buf);
-	if (json == NULL) {
-		const char* error_ptr = cJSON_GetErrorPtr();
-		if (error_ptr != NULL) {
-			printf("%s\n", error_ptr);
-			goto error;
-		}
-	}
-	const cJSON* basic = cJSON_GetObjectItem(json, "basic");
-	const cJSON* explains = cJSON_GetObjectItem(basic, "explains");
-	const cJSON* explain = NULL;
-	cJSON_ArrayForEach(explain, explains) {
-		strcat(buf_body, explain->valuestring);
-		strcat(buf_body, "\n");
-	};
-	const cJSON* web = cJSON_GetObjectItem(json, "web");
-	const cJSON* w = NULL;
-	cJSON_ArrayForEach(w, web) {
-		strcat(buf_body, cJSON_GetObjectItem(w, "key")->valuestring);
-		const cJSON* values = cJSON_GetObjectItem(w, "value");
-		const cJSON* value = NULL;
-		strcat(buf_body, " ");
-		cJSON_ArrayForEach(value, values) {
-			strcat(buf_body, value->valuestring);
-			strcat(buf_body, ",");
-		}
-		buf_body[strlen(buf_body) - 1] = '\n';
-	}
+	//bool result=parse_json(db,s_insert,&mutex,word,buf,buf_body);
 
-	if (strlen(buf_body) > 0) {
-		insert_sql(db, word, buf_body, s_insert);
-	} else {
-
-		// printf("[ERROR]: %s %s\n", word,rs_data(&s));
-
-		log_err("[ERROR]: %s\n", "Result is empty.");
-	}
-
-error:
-	cJSON_Delete(json);
-	rs_free(&s);
-	CLOSESOCKET(fd);
-	return 0;
+	return ;
 }
 
 int main() {
@@ -580,6 +537,10 @@ int main() {
 	}
 #endif
 
+	threadpool_t *pool;
+	pthread_mutex_init(&mutex, NULL);
+
+	pool=threadpool_create(THREAD, MAX_QUEUE, 0);
 	db = database();
 
 	table(db);
@@ -610,8 +571,13 @@ int main() {
 		int rc = query_sql(db, pos->buf, s_query);
 		if (!rc) {
 
-			printf("Processing: %s\n", pos->buf);
-			query(pos->buf);
+			//thread_count++;
+			//printf("[D]: %d.\n",thread_count);
+			pthread_mutex_lock(&mutex);
+			//printf("Processing: %s\n", pos->buf);
+			rc=threadpool_add(pool, &query, strdup(pos->buf), 0);
+			pthread_mutex_unlock(&mutex);
+			//query(pos->buf);
 		} else {
 			//printf("Processed: %s\n", pos->buf);
 		}
